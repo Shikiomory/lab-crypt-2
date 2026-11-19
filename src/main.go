@@ -46,7 +46,15 @@ func RunPlainLSB(byteMsg []byte, plainPixels []byte, bounds image.Rectangle, src
 		return nil, fmt.Errorf("Ошибка при шифровании изображения: %w", err)
 	}
 
-	saveImage(cipherPixels, bounds, srcEncImgPath)
+	err = saveImage(cipherPixels, bounds, srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка сохранения стегоизображения %s: %w", srcEncImgPath, err)
+	}
+
+	cipherPixels, bounds, err = readImage(srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка чтения стегоизображения %s: %w", srcEncImgPath, err)
+	}
 
 	decryptedText, err := DecryptPlainLsb(cipherPixels)
 	if err != nil {
@@ -54,7 +62,9 @@ func RunPlainLSB(byteMsg []byte, plainPixels []byte, bounds image.Rectangle, src
 	}
 
 	equalsMsg(decryptedText, byteMsg)
-
+	if err != nil {
+		return nil, fmt.Errorf("Ошибка при проверке сообщений: %w", err)
+	}
 	return cipherPixels, err
 }
 
@@ -72,7 +82,15 @@ func RunPlainCipherLSB(byteMsg []byte, password string, iv []byte, plainPixels [
 		return nil, fmt.Errorf("Ошибка при шифровании изображения: %w", err)
 	}
 
-	saveImage(cipherPixels, bounds, srcEncImgPath)
+	err = saveImage(cipherPixels, bounds, srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка сохранения стегоизображения %s: %w", srcEncImgPath, err)
+	}
+
+	cipherPixels, bounds, err = readImage(srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка чтения стегоизображения %s: %w", srcEncImgPath, err)
+	}
 
 	decryptMsg, err := DecryptPlainLsb(cipherPixels)
 	if err != nil {
@@ -89,13 +107,15 @@ func RunPlainCipherLSB(byteMsg []byte, password string, iv []byte, plainPixels [
 	}
 
 	equalsMsg(decryptedText, byteMsg)
-
+	if err != nil {
+		return nil, fmt.Errorf("Ошибка при проверке сообщений: %w", err)
+	}
 	return cipherPixels, err
 }
 
 func RunRandLSB(byteMsg []byte, password string, iv []byte, plainPixels []byte, bounds image.Rectangle, srcImgPath string, tag ...string) (cipherPixels []byte, err error) {
 
-	_, srcEncRandomImgPath := createOutPath(srcImgPath, "encryptedRandomLsb", tag...)
+	_, srcEncImgPath := createOutPath(srcImgPath, "encryptedRandomLsb", tag...)
 
 	cipherMsgUn, err := addHeader2Msg(byteMsg, password, iv)
 	if err != nil {
@@ -106,7 +126,16 @@ func RunRandLSB(byteMsg []byte, password string, iv []byte, plainPixels []byte, 
 	if err != nil {
 		return nil, fmt.Errorf("Ошибка при шифровании изображения: %w", err)
 	}
-	saveImage(cipherPixels, bounds, srcEncRandomImgPath)
+
+	err = saveImage(cipherPixels, bounds, srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка сохранения стегоизображения %s: %w", srcEncImgPath, err)
+	}
+
+	cipherPixels, bounds, err = readImage(srcEncImgPath)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка чтения стегоизображения %s: %w", srcEncImgPath, err)
+	}
 
 	decryptMsg, err := DecryptRandLsb(cipherPixels, password)
 	if err != nil {
@@ -122,7 +151,10 @@ func RunRandLSB(byteMsg []byte, password string, iv []byte, plainPixels []byte, 
 		return nil, fmt.Errorf("Ошибка при расшифровке данных: %w", err)
 	}
 
-	equalsMsg(decryptedText, byteMsg)
+	err = equalsMsg(decryptedText, byteMsg)
+	if err != nil {
+		return nil, fmt.Errorf("Ошибка при проверке сообщений: %w", err)
+	}
 	return cipherPixels, err
 }
 
@@ -150,14 +182,14 @@ func addHeader2Msg(byteMsg []byte, password string, iv []byte) (msg []byte, err 
 	return cipherMsgUn, nil
 }
 
-func getHeaderAndMsg(decryptMsg []byte, password string) (encryptedText []byte, key []byte, iv []byte, err error) {
+func getHeaderAndMsg(decryptedMsg []byte, password string) (encryptedText []byte, key []byte, iv []byte, err error) {
 	headerLen := saltLen + ivLen
-	if len(decryptMsg) < headerLen {
+	if len(decryptedMsg) < headerLen {
 		return nil, nil, nil, fmt.Errorf("Размер сообщениея меньше длины заголовка.")
 	}
-	salt := decryptMsg[0:saltLen]
-	iv = decryptMsg[saltLen : saltLen+ivLen]
-	encryptedText = decryptMsg[saltLen+ivLen:]
+	salt := decryptedMsg[0:saltLen]
+	iv = decryptedMsg[saltLen : saltLen+ivLen]
+	encryptedText = decryptedMsg[saltLen+ivLen:]
 
 	key, err = DeriveKey(password, salt, keyLen)
 	if err != nil {
@@ -166,11 +198,9 @@ func getHeaderAndMsg(decryptMsg []byte, password string) (encryptedText []byte, 
 	return encryptedText, key, iv, nil
 }
 
-func equalsMsg(decryptedMsg, plainMsg []byte) {
-	if bytes.Equal(decryptedMsg, plainMsg) {
-		fmt.Println("Сообщения совпадают")
-	} else {
-		fmt.Println("Да чет не очень совпадают сообщения")
+func equalsMsg(decryptedMsg, plainMsg []byte) error {
+	if !bytes.Equal(decryptedMsg, plainMsg) {
+		return fmt.Errorf("Сообщения не совпдают")
 	}
 
 	extractedText := string(decryptedMsg)
@@ -179,6 +209,7 @@ func equalsMsg(decryptedMsg, plainMsg []byte) {
 		preview = string([]rune(extractedText)[:20])
 	}
 	fmt.Printf("расшифрованное сообщение: %s\n", preview)
+	return nil
 }
 
 func addMetrics(cover, stego []byte, bounds image.Rectangle, method string, payload float64, metrics []MetricRow) []MetricRow {
@@ -200,7 +231,7 @@ func printMetrics(metric MetricRow, method string) {
 func main() {
 	histogramImgPath := getEnv("HISTOGRAM_IMG_PATH", "results/histogram.png")
 	histogramCsvPath := getEnv("HISTOGRAM_CSV_PATH", "results/histogram.csv")
-	srcImgPath := getEnv("SRC_IMG_PATH", "imgs/gradient.png")
+	srcImgPath := getEnv("SRC_IMG_PATH", "imgs/photo.png")
 
 	_ = os.Remove(histogramImgPath)
 	_ = os.Remove(histogramCsvPath)
@@ -209,6 +240,7 @@ func main() {
 		srcImgPath = os.Args[1]
 	}
 
+	fmt.Println("Работа с", srcImgPath)
 	cover, bounds, err := readImage(srcImgPath)
 	password := "Penumbra Phantasm"
 
@@ -239,7 +271,10 @@ func main() {
 
 		targetBytes := CalculatePayloadSize(bounds, percent, 0, 0)
 		plainMsg := GenerateFakeText(targetBytes)
-
+		if len(plainMsg) < saltLen+ivLen {
+			fmt.Printf("Ошибка в %d подходе: Слишком маленькое сообщение, соль и iv не влезают", i)
+		}
+		plainMsg = plainMsg[:len(plainMsg)-saltLen-ivLen]
 		//==== Работа PlainLSB
 
 		stego, err = RunPlainLSB(plainMsg, cover, bounds, srcImgPath, iterationTag)
@@ -254,10 +289,10 @@ func main() {
 		printMetrics(last, "PLAINLSB")
 
 		//Генерация нового сообщения из-за добавления шапки
-		if len(plainMsg) < saltLen+ivLen {
-			fmt.Printf("Ошибка в %d подходе: Слишком маленькое сообщение, соль и iv не влезают", i)
-		}
-		plainMsg = plainMsg[:len(plainMsg)-saltLen-ivLen]
+		// if len(plainMsg) < saltLen+ivLen {
+		// 	fmt.Printf("Ошибка в %d подходе: Слишком маленькое сообщение, соль и iv не влезают", i)
+		// }
+		// plainMsg = plainMsg[:len(plainMsg)-saltLen-ivLen]
 
 		//===== Работа PlainCipherLSB
 

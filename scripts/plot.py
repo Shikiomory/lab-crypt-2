@@ -23,7 +23,7 @@ def main():
             cover.append(int(row['cover']))
             stego.append(int(row['stego']))
 
-    diff = [cover[i] - stego[i] for i in range(len(cover))]
+    diff = [stego[i] - cover[i] for i in range(len(cover))]
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 6))
     configs = [
@@ -49,10 +49,10 @@ def main():
         edgecolor='gray'
     )
 
-    bar_colors = ['blue' if d >= 0 else 'red' for d in diff]
+    bar_colors = ['red' if d >= 0 else 'blue' for d in diff]
     legend_elements = [
-        Patch(facecolor='red', label='Убыль Частоты', alpha=alpha),
-        Patch(facecolor='blue', label='Прирост частоты', alpha=alpha)
+        Patch(facecolor='blue', label='Убыль Частоты', alpha=alpha),
+        Patch(facecolor='red', label='Прирост частоты', alpha=alpha)
     ]
     ax2.bar(bytes_range, diff, width=1.0, label=title, color=bar_colors, alpha=alpha, edgecolor='none')
     ax2.set_title("Изменение частот")
